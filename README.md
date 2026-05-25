@@ -1,0 +1,2 @@
+# injiza
+Rwanda income analyzer
