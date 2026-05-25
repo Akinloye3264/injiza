@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { BookkeepingRecord } from "../types";
+import type { Lang } from "../i18n";
+import { t } from "../i18n";
 import { countUp, animateArc, staggerCards, animateBars } from "../anim";
 import { getWeeklyInsight, loanScore } from "../api";
 
@@ -8,6 +10,7 @@ interface Props {
   onSubmit: (entry: string) => Promise<BookkeepingRecord>;
   loading: boolean;
   error: string;
+  lang: Lang;
 }
 
 const CIRC = 2 * Math.PI * 28; // r=28
@@ -62,12 +65,14 @@ const IconAlert = () => (
   </svg>
 );
 
-export default function AppSkin({ records, onSubmit, loading, error }: Props) {
+export default function AppSkin({ records, onSubmit, loading, error, lang }: Props) {
   const [input, setInput] = useState("");
   const [weekInsight, setWeekInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
 
-  const totalProfit = records.reduce((s, r) => s + r.profit, 0);
+  const s = t[lang];
+
+  const totalProfit = records.reduce((sum, r) => sum + r.profit, 0);
   const score = loanScore(records.length, totalProfit);
 
   // Count-up profit
@@ -126,7 +131,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
       const insight = await getWeeklyInsight(records);
       setWeekInsight(insight);
     } catch {
-      setWeekInsight("Ntabwo byakunze. Ongera ugerageze.");
+      setWeekInsight(s.error_generic);
     } finally {
       setInsightLoading(false);
     }
@@ -142,20 +147,20 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
       <div className="stat-tiles">
         <div className="stat-tile">
           <div className="tile-icon"><IconTrending /></div>
-          <div className="tile-label">Total Profit</div>
+          <div className="tile-label">{s.profit}</div>
           <div className={`tile-value ${totalProfit >= 0 ? "positive" : "negative"}`}>
             <span ref={profitRef}>{totalProfit.toLocaleString()}</span>
           </div>
-          <div className="tile-sub">Rwandan Francs</div>
+          <div className="tile-sub">{s.currency_label}</div>
         </div>
 
         <div className="stat-tile">
           <div className="tile-icon"><IconList /></div>
-          <div className="tile-label">Entries</div>
+          <div className="tile-label">{s.entries}</div>
           <div className="tile-value">
             <span ref={entriesRef}>{records.length}</span>
           </div>
-          <div className="tile-sub">recorded transactions</div>
+          <div className="tile-sub">{s.recorded_tx}</div>
         </div>
 
         <div className="stat-tile loan-tile">
@@ -177,8 +182,8 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
           </div>
           <div className="loan-info">
             <div className="tile-icon" style={{ marginBottom: 8 }}><IconAward /></div>
-            <div className="tile-label">Loan Readiness</div>
-            <div className="loan-illustrative">Illustrative score only — not a real credit rating</div>
+            <div className="tile-label">{s.loan_readiness}</div>
+            <div className="loan-illustrative">{s.illustrative_note}</div>
           </div>
         </div>
       </div>
@@ -194,7 +199,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
           <IconPen />
           <input
             type="text"
-            placeholder="naguze ibirayi 5000, nagurishije 7000…"
+            placeholder={s.placeholder_app}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submit(input)}
@@ -204,7 +209,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
         </div>
         <button className="btn-primary" onClick={() => submit(input)} disabled={loading || !input.trim()}>
           <IconSend />
-          {loading ? "Parsing…" : "Add Entry"}
+          {loading ? s.parsing : s.add_entry}
         </button>
       </div>
 
@@ -212,7 +217,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
       <div className="insight-section">
         <button className="btn-insight" onClick={fetchWeekInsight} disabled={insightLoading || !records.length}>
           <IconLightbulb />
-          {insightLoading ? "Generating insight…" : "Get this week's coaching insight"}
+          {insightLoading ? s.generating : s.get_insight_btn}
         </button>
         {weekInsight && (
           <div className="insight-card">
@@ -226,7 +231,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
       {records.length > 0 && (
         <div className="chart-section">
           <div className="section-eyebrow">
-            <IconBarChart /> Profit history
+            <IconBarChart /> {s.profit_history}
           </div>
           <div className="chart-wrap">
             <svg
@@ -261,11 +266,11 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
       <div className="entries-section">
         <div className="entries-header">
           <div className="section-eyebrow" style={{ marginBottom: 0 }}>
-            <IconList /> Records
+            <IconList /> {s.records_title}
           </div>
           {records.length > 0 && (
             <span style={{ fontSize: "0.72rem", color: "var(--text-3)" }}>
-              {records.length} {records.length === 1 ? "entry" : "entries"}
+              {records.length} {records.length === 1 ? s.entry_one : s.entries_many}
             </span>
           )}
         </div>
@@ -273,7 +278,7 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
         {records.length === 0 ? (
           <div className="empty-state">
             <IconInbox />
-            No records yet. Add an entry above or tap an example chip.
+            {s.no_records}
           </div>
         ) : (
           [...records].reverse().map((r) => {
@@ -287,8 +292,8 @@ export default function AppSkin({ records, onSubmit, loading, error }: Props) {
                   </div>
                 </div>
                 <div className="entry-meta">
-                  <span>Cost: <span>{r.total_cost.toLocaleString()} RWF</span></span>
-                  <span>Revenue: <span>{r.total_revenue.toLocaleString()} RWF</span></span>
+                  <span>{s.cost}: <span>{r.total_cost.toLocaleString()} RWF</span></span>
+                  <span>{s.revenue}: <span>{r.total_revenue.toLocaleString()} RWF</span></span>
                 </div>
                 <div className="entry-insight">
                   <IconLightbulb />

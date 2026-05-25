@@ -18,7 +18,7 @@ function getSession(sessionId) {
 }
 
 function createSession(sessionId) {
-  const s = { step: "MAIN_MENU", records: [], pendingEntry: "", lastActive: Date.now() };
+  const s = { step: "MAIN_MENU", records: [], pendingEntry: "", lang: null, lastActive: Date.now() };
   sessions.set(sessionId, s);
   return s;
 }

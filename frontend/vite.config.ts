@@ -6,8 +6,8 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy API calls to backend during development
-      "/api": "http://localhost:3001",
+      "/api":  "http://localhost:3001",
+      "/ussd": "http://localhost:3001",
     },
   },
 });

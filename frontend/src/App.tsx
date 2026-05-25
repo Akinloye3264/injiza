@@ -1,23 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { BookkeepingRecord, Skin } from "./types";
-import { callClaude, EXAMPLES } from "./api";
-import { revealPageElements, slideIndicator, skinOut, skinIn } from "./anim";
-import UssdInfoPanel from "./components/UssdInfoPanel";
+import type { BookkeepingRecord } from "./types";
+import type { Lang } from "./i18n";
+import { t } from "./i18n";
+import { callClaude } from "./api";
+import { revealPageElements, skinIn } from "./anim";
 import AppSkin from "./components/AppSkin";
+import UssdSimulator from "./components/UssdSimulator";
 import "./styles/global.css";
 
-const IconGrid = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
-  </svg>
-);
-const IconPhone = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-    <rect x="5" y="2" width="14" height="20" rx="2"/>
-    <circle cx="12" cy="18" r="1" fill="currentColor" stroke="none"/>
-  </svg>
-);
 const IconZap = () => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
@@ -30,36 +20,17 @@ const IconPlay = () => (
 );
 
 export default function App() {
-  const [skin, setSkin] = useState<Skin>("app");
+  const [lang, setLang] = useState<Lang>("en");
   const [records, setRecords] = useState<BookkeepingRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const indicatorRef = useRef<HTMLDivElement>(null);
-  const skinContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    revealPageElements(".header, .header-divider, .toggle-wrap, .examples-section");
-    if (skinContainerRef.current) skinIn(skinContainerRef.current);
-    // indicator starts on left (app tab) — no translation needed
+    revealPageElements(".header, .header-divider, .examples-section");
+    if (contentRef.current) skinIn(contentRef.current);
   }, []);
-
-  async function switchSkin(next: Skin) {
-    if (next === skin) return;
-    if (skinContainerRef.current) {
-      await skinOut(skinContainerRef.current).finished;
-    }
-    setSkin(next);
-    if (indicatorRef.current) {
-      const parent = indicatorRef.current.parentElement;
-      const w = parent ? parent.offsetWidth / 2 : 130;
-      slideIndicator(indicatorRef.current, next === "ussd" ? w - 3 : 0);
-    }
-  }
-
-  useEffect(() => {
-    if (skinContainerRef.current) skinIn(skinContainerRef.current);
-  }, [skin]);
 
   async function handleSubmit(entry: string): Promise<BookkeepingRecord> {
     setLoading(true);
@@ -70,7 +41,7 @@ export default function App() {
       setRecords((prev) => [...prev, record]);
       return record;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Hari ikibazo. Ongera ugerageze.";
+      const msg = e instanceof Error ? e.message : t[lang].error_generic;
       setError(msg);
       throw e;
     } finally {
@@ -82,63 +53,59 @@ export default function App() {
     <div className="app-wrapper">
 
       <header className="header" style={{ opacity: 0 }}>
-        <div>
+        <div className="header-left">
           <h1 className="wordmark">
             INJ<span className="wordmark-accent">IZ</span>A<span className="wordmark-dot" aria-hidden="true" />
           </h1>
           <p className="tagline">kwinjiza amafaranga · making income visible</p>
         </div>
-        <div className="header-badge">
-          <IconZap /> Powered by Claude AI
+        <div className="header-right">
+          <div className="lang-toggle" role="group" aria-label="Select language">
+            <button
+              className={`lang-btn ${lang === "en" ? "active" : ""}`}
+              onClick={() => setLang("en")}
+              aria-pressed={lang === "en"}
+            >EN</button>
+            <button
+              className={`lang-btn ${lang === "rw" ? "active" : ""}`}
+              onClick={() => setLang("rw")}
+              aria-pressed={lang === "rw"}
+            >KIN</button>
+          </div>
+          <div className="header-badge">
+            <IconZap /> Powered by Claude AI
+          </div>
         </div>
       </header>
 
       <div className="header-divider" style={{ opacity: 0 }} />
 
-      {/* Toggle — always visible, high contrast active state */}
-      <div className="toggle-wrap" style={{ opacity: 0 }}>
-        <span className="toggle-label">View</span>
-        <div className="toggle" role="tablist" aria-label="Select view">
-          <div className="toggle-indicator" ref={indicatorRef} />
-          <button
-            className={`toggle-btn ${skin === "app" ? "active" : ""}`}
-            role="tab"
-            aria-selected={skin === "app"}
-            onClick={() => switchSkin("app")}
-          >
-            <IconGrid /> Dashboard
-          </button>
-          <button
-            className={`toggle-btn ${skin === "ussd" ? "active" : ""}`}
-            role="tab"
-            aria-selected={skin === "ussd"}
-            onClick={() => switchSkin("ussd")}
-          >
-            <IconPhone /> USSD
-          </button>
+      <div className="examples-section" style={{ opacity: 0 }}>
+        <div className="section-eyebrow"><IconPlay /> {t[lang].try_example}</div>
+        <div className="examples-row">
+          {t[lang].chips.map((chip) => (
+            <button
+              key={chip.full}
+              className="chip"
+              title={chip.full}
+              onClick={() => handleSubmit(chip.full)}
+              disabled={loading}
+            >
+              <IconPlay />{chip.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Example chips — dashboard only */}
-      {skin === "app" && (
-        <div className="examples-section" style={{ opacity: 0 }}>
-          <div className="section-eyebrow"><IconPlay /> Try an example</div>
-          <div className="examples-row">
-            {EXAMPLES.map((ex) => (
-              <button key={ex} className="chip" title={ex} onClick={() => handleSubmit(ex)} disabled={loading}>
-                <IconPlay />{ex}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div ref={skinContainerRef} style={{ opacity: 0 }}>
-        {skin === "app" ? (
-          <AppSkin records={records} onSubmit={handleSubmit} loading={loading} error={error} />
-        ) : (
-          <UssdInfoPanel />
-        )}
+      <div ref={contentRef} style={{ opacity: 0 }}>
+        <AppSkin
+          records={records}
+          onSubmit={handleSubmit}
+          loading={loading}
+          error={error}
+          lang={lang}
+        />
+        <UssdSimulator lang={lang} />
       </div>
 
     </div>

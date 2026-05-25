@@ -15,5 +15,3 @@ export interface BookkeepingRecord {
   insight: string;
   ts: number;
 }
-
-export type Skin = "app" | "ussd";
