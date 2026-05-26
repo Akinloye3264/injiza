@@ -1,10 +1,58 @@
 // ── Injiza animation helpers — all anime.js calls live here ─────────────────
-// Import and call these from components; clean up returned animations on unmount.
-
 import anime from "animejs";
 
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 const dur = (ms: number) => (reduced ? 0 : ms);
+
+// Organic blob morph — loops forever, gives the hero life
+export function morphBlob(el: Element, delay = 0) {
+  return anime({
+    targets: el,
+    borderRadius: [
+      "50% 62% 55% 48% / 60% 50% 68% 55%",
+      "62% 48% 68% 54% / 50% 68% 46% 62%",
+      "48% 58% 52% 64% / 64% 44% 58% 50%",
+      "58% 50% 46% 56% / 48% 60% 52% 46%",
+      "50% 62% 55% 48% / 60% 50% 68% 55%",
+    ],
+    translateY: [0, -18, 8, -12, 0],
+    translateX: [0, 12, -8, 14, 0],
+    scale: [1, 1.04, 0.97, 1.02, 1],
+    duration: dur(14000),
+    loop: true,
+    easing: "easeInOutSine",
+    delay,
+  });
+}
+
+// Hero entrance: eyebrow + wordmark slide up from below
+export function animateHeroEntrance(eyebrowEl: Element, wordmarkEl: Element) {
+  return anime.timeline({ easing: "easeOutExpo" })
+    .add({
+      targets: eyebrowEl,
+      opacity: [0, 1],
+      translateY: [20, 0],
+      duration: dur(600),
+    })
+    .add({
+      targets: wordmarkEl,
+      opacity: [0, 1],
+      translateY: [40, 0],
+      scale: [0.92, 1],
+      duration: dur(750),
+    }, "-=300");
+}
+
+// Tab panel transition — slide in from right
+export function animateTabIn(el: Element) {
+  return anime({
+    targets: el,
+    opacity: [0, 1],
+    translateX: [24, 0],
+    duration: dur(380),
+    easing: "easeOutExpo",
+  });
+}
 
 // Page-load stagger reveal
 export function revealPageElements(targets: string) {

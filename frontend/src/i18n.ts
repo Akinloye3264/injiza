@@ -56,6 +56,9 @@ export const t = {
     sim_connecting: "Connecting…",
     sim_session_ended: "Session ended",
     sim_error: "Connection failed",
+    tab_bookkeeping: "Bookkeeping App",
+    tab_ussd: "USSD Simulator",
+    hero_subtitle: "INJIZA — Effortless bookkeeping for Rwanda's micro-businesses. Track income, costs, and loan readiness using natural language — powered by Claude AI.",
   },
   rw: {
     tagline: "kwinjiza amafaranga",
@@ -112,6 +115,9 @@ export const t = {
     sim_connecting: "Guhuza…",
     sim_session_ended: "Ikiganiro cyarangiye",
     sim_error: "Guhuza ntibyakunze",
+    tab_bookkeeping: "Kwandika Amafaranga",
+    tab_ussd: "Gerageza USSD",
+    hero_subtitle: "INJIZA — Kwandika amafaranga y'ubucuruzi bwawe buri munsi. Kureba inyungu, ibiciro, n'inguzanyo — ukoresheje ururimi rw'umuntu.",
   },
 } as const;
 

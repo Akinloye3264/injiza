@@ -1,1 +1,5 @@
 .env
+.claude
+.claude_cache
+package-lock.json
+node_modules

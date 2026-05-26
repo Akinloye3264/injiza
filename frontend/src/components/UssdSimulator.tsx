@@ -4,6 +4,7 @@ import { t } from "../i18n";
 
 interface Props {
   lang: Lang;
+  inlineMode?: boolean;
 }
 
 const BASE = import.meta.env.VITE_API_BASE ?? "";
@@ -13,42 +14,27 @@ const SIM_PHONE = "+250788000000";
 type Phase = "idle" | "loading" | "session" | "ended" | "error";
 
 const DIGIT_KEYS = [
-  { k: "1", sub: "" },
-  { k: "2", sub: "ABC" },
-  { k: "3", sub: "DEF" },
-  { k: "4", sub: "GHI" },
-  { k: "5", sub: "JKL" },
-  { k: "6", sub: "MNO" },
-  { k: "7", sub: "PQRS" },
-  { k: "8", sub: "TUV" },
-  { k: "9", sub: "WXYZ" },
-  { k: "*", sub: "" },
-  { k: "0", sub: "+" },
-  { k: "#", sub: "" },
+  { k: "1", sub: "" },   { k: "2", sub: "ABC" }, { k: "3", sub: "DEF" },
+  { k: "4", sub: "GHI" },{ k: "5", sub: "JKL" }, { k: "6", sub: "MNO" },
+  { k: "7", sub: "PQRS"},{ k: "8", sub: "TUV" }, { k: "9", sub: "WXYZ"},
+  { k: "*", sub: "" },   { k: "0", sub: "+" },    { k: "#", sub: "" },
 ];
 
-function uid() {
-  return `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-}
+function uid() { return `SIM-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`; }
 
 function renderLine(line: string, idx: number, isFirst: boolean) {
   const menuMatch = line.match(/^(\d+)\.\s(.+)$/);
-  if (menuMatch) {
-    return (
-      <div key={idx} className="sim-line sim-menu-option">
-        <span className="sim-menu-num">{menuMatch[1]}.</span>
-        <span className="sim-menu-text">{menuMatch[2]}</span>
-      </div>
-    );
-  }
-  if (!line.trim()) return <div key={idx} className="sim-line-gap" />;
-  return (
-    <div key={idx} className={`sim-line ${isFirst ? "sim-line-title" : ""}`}>
-      {line}
+  if (menuMatch) return (
+    <div key={idx} className="sim-line sim-menu-option">
+      <span className="sim-menu-num">{menuMatch[1]}.</span>
+      <span className="sim-menu-text">{menuMatch[2]}</span>
     </div>
   );
+  if (!line.trim()) return <div key={idx} className="sim-line-gap" />;
+  return <div key={idx} className={`sim-line ${isFirst ? "sim-line-title" : ""}`}>{line}</div>;
 }
 
+// ── Icons ──────────────────────────────────────────────────────────────────
 const IconPhone = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
     <path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2a1 1 0 0 1 1.02-.24c1.12.37 2.33.57 3.57.57a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C9.61 21 3 14.39 3 6.5a1 1 0 0 1 1-1H8a1 1 0 0 1 1 1c0 1.25.2 2.45.57 3.57a1 1 0 0 1-.24 1.02l-2.71 2.7z"/>
@@ -66,71 +52,55 @@ const IconSend = () => (
 );
 const IconDelete = () => (
   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
+    <path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/>
+    <line x1="18" y1="9" x2="12" y2="15"/><line x1="12" y1="9" x2="18" y2="15"/>
   </svg>
 );
 
-export default function UssdSimulator({ lang }: Props) {
+export default function UssdSimulator({ lang, inlineMode = false }: Props) {
   const s = t[lang];
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase]         = useState<Phase>("idle");
   const [sessionId, setSessionId] = useState("");
   const [textChain, setTextChain] = useState("");
   const [screenText, setScreenText] = useState("");
-  const [inputBuf, setInputBuf] = useState("");
-  const [errMsg, setErrMsg] = useState("");
-  const [time, setTime] = useState(() =>
+  const [inputBuf, setInputBuf]   = useState("");
+  const [errMsg, setErrMsg]       = useState("");
+  const [time, setTime]           = useState(() =>
     new Date().toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })
   );
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Clock tick
   useEffect(() => {
-    const id = setInterval(() => {
-      setTime(new Date().toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }));
-    }, 60_000);
+    const id = setInterval(() =>
+      setTime(new Date().toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" }))
+    , 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // Focus input when session starts
   useEffect(() => {
     if (phase === "session") inputRef.current?.focus();
   }, [phase]);
 
   function pressKey(k: string) {
-    if (phase === "session") {
-      setInputBuf((p) => p + k);
-      inputRef.current?.focus();
-    }
+    if (phase === "session") { setInputBuf((p) => p + k); inputRef.current?.focus(); }
   }
-
-  function pressBackspace() {
-    setInputBuf((p) => p.slice(0, -1));
-  }
+  function pressBackspace() { setInputBuf((p) => p.slice(0, -1)); }
 
   async function pressAction() {
     if (phase === "loading") return;
-
     if (phase === "idle") {
       const sid = uid();
-      setSessionId(sid);
-      setTextChain("");
-      setInputBuf("");
-      setErrMsg("");
-      await callUssd(sid, "");
-      return;
+      setSessionId(sid); setTextChain(""); setInputBuf(""); setErrMsg("");
+      await callUssd(sid, ""); return;
     }
-
     if (phase === "session") {
       const reply = inputBuf.trim();
       if (!reply) return;
       const newChain = textChain === "" ? reply : `${textChain}*${reply}`;
       setInputBuf("");
-      await callUssd(sessionId, newChain);
-      return;
+      await callUssd(sessionId, newChain); return;
     }
-
-    // ended / error → reset
     reset();
   }
 
@@ -140,19 +110,13 @@ export default function UssdSimulator({ lang }: Props) {
       const res = await fetch(`${BASE}/ussd`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: sid,
-          phoneNumber: SIM_PHONE,
-          serviceCode: SERVICE_CODE,
-          text: chain,
-        }),
+        body: JSON.stringify({ sessionId: sid, phoneNumber: SIM_PHONE, serviceCode: SERVICE_CODE, text: chain }),
       });
       const raw = await res.text();
       const isCon = raw.startsWith("CON ");
       const isEnd = raw.startsWith("END ");
-      const body = isCon ? raw.slice(4) : isEnd ? raw.slice(4) : raw;
-      setTextChain(chain);
-      setScreenText(body);
+      const body  = isCon ? raw.slice(4) : isEnd ? raw.slice(4) : raw;
+      setTextChain(chain); setScreenText(body);
       setPhase(isEnd ? "ended" : "session");
     } catch {
       setErrMsg("Connection failed. Is the backend running?");
@@ -161,20 +125,127 @@ export default function UssdSimulator({ lang }: Props) {
   }
 
   function reset() {
-    setPhase("idle");
-    setSessionId("");
-    setTextChain("");
-    setScreenText("");
-    setInputBuf("");
-    setErrMsg("");
+    setPhase("idle"); setSessionId(""); setTextChain("");
+    setScreenText(""); setInputBuf(""); setErrMsg("");
   }
 
   const isEnded = phase === "ended" || phase === "error";
-  const actionLabel = isEnded ? s.sim_hangup : phase === "session" ? s.sim_send : s.sim_call;
+  const actionLabel   = isEnded ? s.sim_hangup : phase === "session" ? s.sim_send : s.sim_call;
   const actionDisabled = phase === "loading" || (phase === "session" && !inputBuf.trim());
-
   const lines = screenText.split("\n");
 
+  // ── Shared screen body content ──────────────────────────────────────────
+  const screenContent = (
+    <>
+      {phase === "idle" && (
+        <div className="screen-idle">
+          <div className="idle-code">{SERVICE_CODE}</div>
+          <div className="idle-hint">{s.sim_dial_hint}</div>
+        </div>
+      )}
+      {phase === "loading" && (
+        <div className="screen-loading">
+          <div className="loading-dots"><span /><span /><span /></div>
+          <div className="loading-label">{s.sim_connecting}</div>
+        </div>
+      )}
+      {(phase === "session" || phase === "ended") && (
+        <div className="screen-session">
+          <div className="screen-scroll">
+            {lines.map((line, i) => renderLine(line, i, i === 0))}
+          </div>
+          {phase === "ended" && <div className="screen-ended-badge">{s.sim_session_ended}</div>}
+        </div>
+      )}
+      {phase === "error" && (
+        <div className="screen-loading">
+          <div className="screen-err-icon">✕</div>
+          <div className="loading-label">{errMsg}</div>
+        </div>
+      )}
+    </>
+  );
+
+  // ── Shared keypad ────────────────────────────────────────────────────────
+  const keypad = (
+    <div className={inlineMode ? "ussd-inline-keypad" : "phone-keypad"}>
+      {DIGIT_KEYS.map(({ k, sub }) => (
+        <button
+          key={k}
+          className={inlineMode
+            ? `ussd-inline-key ${k === "*" || k === "#" ? "ussd-inline-key-sym" : ""}`
+            : `sim-key ${k === "*" || k === "#" ? "sim-key-sym" : ""}`}
+          onClick={() => pressKey(k)}
+          disabled={phase === "loading" || phase === "ended" || phase === "error"}
+        >
+          <span className={inlineMode ? "ussd-inline-key-main" : "sim-key-main"}>{k}</span>
+          {sub && <span className={inlineMode ? "ussd-inline-key-sub" : "sim-key-sub"}>{sub}</span>}
+        </button>
+      ))}
+
+      {/* Backspace */}
+      <button
+        className={inlineMode ? "ussd-inline-key ussd-inline-key-del" : "sim-key sim-key-del"}
+        onClick={pressBackspace}
+        disabled={phase === "loading" || !inputBuf}
+        aria-label="Delete"
+      >
+        <IconDelete />
+      </button>
+
+      {/* Action: Call / Send / Hang up */}
+      <button
+        className={inlineMode
+          ? `ussd-inline-key ussd-inline-key-action ${isEnded ? "ussd-inline-key-hangup" : ""}`
+          : `sim-key sim-key-action ${isEnded ? "sim-key-hangup" : ""}`}
+        onClick={pressAction}
+        disabled={actionDisabled}
+      >
+        {isEnded
+          ? <><IconPhoneOff /> {actionLabel}</>
+          : phase === "session"
+            ? <><IconSend /> {actionLabel}</>
+            : <><IconPhone /> {actionLabel}</>}
+      </button>
+    </div>
+  );
+
+  // ── INLINE MODE — no outer phone shell ──────────────────────────────────
+  if (inlineMode) {
+    return (
+      <div className="ussd-inline">
+        {/* Service code bar */}
+        <div className="ussd-inline-bar">
+          <span className="ussd-service-code">{SERVICE_CODE}</span>
+          <span className="ussd-inline-time">{time}</span>
+        </div>
+
+        {/* Screen content */}
+        <div className="ussd-inline-screen">{screenContent}</div>
+
+        {/* Input row — only while session */}
+        {phase === "session" && (
+          <div className="ussd-inline-input-row">
+            <span className="screen-prompt">›</span>
+            <input
+              ref={inputRef}
+              className="screen-input"
+              value={inputBuf}
+              onChange={(e) => setInputBuf(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && pressAction()}
+              placeholder="type reply…"
+              autoComplete="off" autoCorrect="off" spellCheck={false}
+            />
+          </div>
+        )}
+
+        {/* Keypad */}
+        {keypad}
+      </div>
+    );
+  }
+
+  // ── STANDALONE MODE — original phone shell ───────────────────────────────
   return (
     <section className="ussd-sim-section">
       <div className="ussd-sim-header">
@@ -186,11 +257,8 @@ export default function UssdSimulator({ lang }: Props) {
 
       <div className="ussd-sim-center">
         <div className="phone-shell">
-
-          {/* Pill notch */}
           <div className="phone-notch" />
 
-          {/* ── Screen ── */}
           <div className="phone-screen">
             <div className="screen-bar">
               <span className="screen-carrier">INJIZA</span>
@@ -204,47 +272,9 @@ export default function UssdSimulator({ lang }: Props) {
             </div>
 
             <div className="screen-body">
-
-              {/* IDLE */}
-              {phase === "idle" && (
-                <div className="screen-idle">
-                  <div className="idle-code">{SERVICE_CODE}</div>
-                  <div className="idle-hint">{s.sim_dial_hint}</div>
-                </div>
-              )}
-
-              {/* LOADING */}
-              {phase === "loading" && (
-                <div className="screen-loading">
-                  <div className="loading-dots">
-                    <span /><span /><span />
-                  </div>
-                  <div className="loading-label">{s.sim_connecting}</div>
-                </div>
-              )}
-
-              {/* SESSION / ENDED */}
-              {(phase === "session" || phase === "ended") && (
-                <div className="screen-session">
-                  <div className="screen-scroll">
-                    {lines.map((line, i) => renderLine(line, i, i === 0))}
-                  </div>
-                  {phase === "ended" && (
-                    <div className="screen-ended-badge">{s.sim_session_ended}</div>
-                  )}
-                </div>
-              )}
-
-              {/* ERROR */}
-              {phase === "error" && (
-                <div className="screen-loading">
-                  <div className="screen-err-icon">✕</div>
-                  <div className="loading-label">{errMsg}</div>
-                </div>
-              )}
+              {screenContent}
             </div>
 
-            {/* Input row — visible only in session */}
             {phase === "session" && (
               <div className="screen-input-row">
                 <span className="screen-prompt">›</span>
@@ -255,54 +285,13 @@ export default function UssdSimulator({ lang }: Props) {
                   onChange={(e) => setInputBuf(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && pressAction()}
                   placeholder="type reply…"
-                  autoComplete="off"
-                  autoCorrect="off"
-                  spellCheck={false}
+                  autoComplete="off" autoCorrect="off" spellCheck={false}
                 />
               </div>
             )}
           </div>
 
-          {/* ── Keypad ── */}
-          <div className="phone-keypad">
-            {DIGIT_KEYS.map(({ k, sub }) => (
-              <button
-                key={k}
-                className={`sim-key ${k === "*" || k === "#" ? "sim-key-sym" : ""}`}
-                onClick={() => pressKey(k)}
-                disabled={phase === "loading" || phase === "ended" || phase === "error"}
-              >
-                <span className="sim-key-main">{k}</span>
-                {sub && <span className="sim-key-sub">{sub}</span>}
-              </button>
-            ))}
-
-            {/* Backspace */}
-            <button
-              className="sim-key sim-key-del"
-              onClick={pressBackspace}
-              disabled={phase === "loading" || !inputBuf}
-              aria-label="Delete"
-            >
-              <IconDelete />
-            </button>
-
-            {/* Action button: Call / Send / Hang Up */}
-            <button
-              className={`sim-key sim-key-action ${isEnded ? "sim-key-hangup" : ""}`}
-              onClick={pressAction}
-              disabled={actionDisabled}
-            >
-              {isEnded
-                ? <><IconPhoneOff /> {actionLabel}</>
-                : phase === "session"
-                  ? <><IconSend /> {actionLabel}</>
-                  : <><IconPhone /> {actionLabel}</>
-              }
-            </button>
-          </div>
-
-          {/* Home indicator */}
+          {keypad}
           <div className="phone-home" />
         </div>
       </div>
