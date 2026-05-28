@@ -15,6 +15,59 @@ interface Props {
 
 const CIRC = 2 * Math.PI * 28; // r=28
 
+// Strip dangerous special characters; allow letters, digits, safe punctuation.
+const FORBIDDEN = /[^a-zA-ZÀ-ɏƀ-ɏ\s\d,.''\-]/g;
+
+function sanitize(val: string): string {
+  return val.replace(FORBIDDEN, "");
+}
+
+/**
+ * A valid bookkeeping entry must have:
+ *  - at least one letter (item description)
+ *  - at least one digit  (an amount)
+ *  - at least 5 characters total
+ * Returns a validation error string, or "" when valid.
+ */
+function validateEntry(val: string): string {
+  const v = val.trim();
+  if (v.length < 5)                   return "Entry is too short — describe what you bought or sold.";
+  if (!/[a-zA-ZÀ-ɏƀ-ɏ]/.test(v))     return "Include an item name (e.g. potatoes, ibirayi).";
+  if (!/\d/.test(v))                  return "Include the amount in RWF (e.g. 5000).";
+  return "";
+}
+
+// ── Speech helpers ─────────────────────────────────────────────────────────
+
+type RecognitionCtor = new () => {
+  lang: string;
+  interimResults: boolean;
+  maxAlternatives: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  onresult: ((e: any) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+};
+
+function getSR(): RecognitionCtor | null {
+  const w = window as unknown as Record<string, unknown>;
+  return (w["SpeechRecognition"] ?? w["webkitSpeechRecognition"] ?? null) as RecognitionCtor | null;
+}
+
+function hasTTS(): boolean { return "speechSynthesis" in window; }
+
+function speak(text: string, lang: Lang) {
+  if (!hasTTS()) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.lang = lang === "rw" ? "rw-RW" : "en-US";
+  utt.rate = 0.91;
+  utt.pitch = 1;
+  window.speechSynthesis.speak(utt);
+}
+
 // ── SVG icons ────────────────────────────────────────────────────────────────
 const IconTrending = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -64,11 +117,40 @@ const IconAlert = () => (
     <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
   </svg>
 );
+const IconMic = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+    <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+    <line x1="12" y1="19" x2="12" y2="23"/>
+    <line x1="8" y1="23" x2="16" y2="23"/>
+  </svg>
+);
+const IconVolume = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+  </svg>
+);
+const IconMicOff = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <line x1="1" y1="1" x2="23" y2="23"/>
+    <path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/>
+    <path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/>
+    <line x1="12" y1="19" x2="12" y2="23"/>
+    <line x1="8" y1="23" x2="16" y2="23"/>
+  </svg>
+);
 
 export default function AppSkin({ records, onSubmit, loading, error, lang }: Props) {
-  const [input, setInput] = useState("");
+  const [input, setInput]             = useState("");
+  const [validationMsg, setValidationMsg] = useState("");
   const [weekInsight, setWeekInsight] = useState("");
   const [insightLoading, setInsightLoading] = useState(false);
+  const [voiceState, setVoiceState]   = useState<"idle" | "listening" | "error">("idle");
+
+  const recognitionRef = useRef<{ stop(): void } | null>(null);
+  const validationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const s = t[lang];
 
@@ -118,24 +200,81 @@ export default function AppSkin({ records, onSubmit, loading, error, lang }: Pro
     if (records.length > 0) animateBars(".chart-bar");
   }, [records.length]);
 
-  async function submit(text: string) {
-    if (!text.trim() || loading) return;
-    setInput("");
-    await onSubmit(text.trim());
+  // Stop recognition on unmount
+  useEffect(() => {
+    return () => { recognitionRef.current?.stop(); };
+  }, []);
+
+  // ── Input change with strict validation ──────────────────────────────────
+  function handleInputChange(val: string) {
+    const cleaned = sanitize(val);
+    if (cleaned !== val) {
+      setValidationMsg(s.voice_validation_err);
+      if (validationTimer.current) clearTimeout(validationTimer.current);
+      validationTimer.current = setTimeout(() => setValidationMsg(""), 2200);
+    }
+    setInput(cleaned);
   }
 
+  // ── Submit ───────────────────────────────────────────────────────────────
+  async function submit(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || loading) return;
+    if (validateEntry(trimmed)) return;   // blocked: invalid syntax
+    setInput("");
+    try {
+      const record = await onSubmit(trimmed);
+      if (record?.insight) speak(record.insight, lang);
+    } catch {
+      // error already surfaced via App.tsx → error prop
+    }
+  }
+
+  // ── Weekly insight ────────────────────────────────────────────────────────
   async function fetchWeekInsight() {
     if (!records.length) return;
     setInsightLoading(true);
     try {
       const insight = await getWeeklyInsight(records);
       setWeekInsight(insight);
+      speak(insight, lang);
     } catch {
       setWeekInsight(s.error_generic);
     } finally {
       setInsightLoading(false);
     }
   }
+
+  // ── Voice input ───────────────────────────────────────────────────────────
+  function startVoice() {
+    const SR = getSR();
+    if (!SR) { setVoiceState("error"); return; }
+
+    const rec = new SR();
+    rec.lang = lang === "rw" ? "rw-RW" : "en-US";
+    rec.interimResults = false;
+    rec.maxAlternatives = 3;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
+      const transcript = e.results[0][0].transcript as string;
+      handleInputChange(transcript);
+      setVoiceState("idle");
+    };
+    rec.onerror = () => setVoiceState("error");
+    rec.onend   = () => setVoiceState("idle");
+
+    recognitionRef.current = rec;
+    rec.start();
+    setVoiceState("listening");
+  }
+
+  function stopVoice() {
+    recognitionRef.current?.stop();
+    setVoiceState("idle");
+  }
+
+  const voiceSupported = !!getSR();
 
   const maxAbs = Math.max(...records.map((r) => Math.abs(r.profit)), 1);
   const chartH = 80;
@@ -188,30 +327,73 @@ export default function AppSkin({ records, onSubmit, loading, error, lang }: Pro
         </div>
       </div>
 
-      {/* ── Input ── */}
+      {/* ── Error / validation banners ── */}
       {error && (
         <div className="error-banner">
           <IconAlert /> {error}
         </div>
       )}
-      <div className="input-row">
-        <div className="input-wrap">
-          <IconPen />
-          <input
-            type="text"
-            placeholder={s.placeholder_app}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && submit(input)}
-            disabled={loading}
-            aria-label="Enter bookkeeping record"
-          />
+      {validationMsg && (
+        <div className="validation-banner">
+          <IconAlert /> {validationMsg}
         </div>
-        <button className="btn-primary" onClick={() => submit(input)} disabled={loading || !input.trim()}>
-          <IconSend />
-          {loading ? s.parsing : s.add_entry}
-        </button>
-      </div>
+      )}
+
+      {/* ── Input row ── */}
+      {(() => {
+        const entryErr = input.trim() ? validateEntry(input) : "";
+        const canSubmit = !!input.trim() && !entryErr;
+        return (
+          <>
+            <div className="input-row">
+              <div className={`input-wrap ${entryErr ? "input-invalid" : input.trim() && !entryErr ? "input-valid" : ""}`}>
+                <IconPen />
+                <input
+                  type="text"
+                  placeholder={s.placeholder_app}
+                  value={input}
+                  onChange={(e) => handleInputChange(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submit(input)}
+                  disabled={loading}
+                  aria-label="Enter bookkeeping record"
+                  aria-invalid={!!entryErr}
+                />
+                {voiceSupported && (
+                  <button
+                    className={`btn-mic ${voiceState === "listening" ? "listening" : ""} ${voiceState === "error" ? "mic-error" : ""}`}
+                    onClick={voiceState === "listening" ? stopVoice : startVoice}
+                    disabled={loading}
+                    title={voiceState === "listening" ? s.voice_stop : s.voice_start}
+                    aria-label={voiceState === "listening" ? s.voice_stop : s.voice_start}
+                  >
+                    {voiceState === "listening" ? <IconMicOff /> : <IconMic />}
+                  </button>
+                )}
+              </div>
+              <button className="btn-primary" onClick={() => submit(input)} disabled={loading || !canSubmit}>
+                <IconSend />
+                {loading ? s.parsing : s.add_entry}
+              </button>
+            </div>
+            {entryErr && (
+              <div className="entry-hint">
+                <IconAlert /> {entryErr}
+              </div>
+            )}
+          </>
+        );
+      })()}
+
+      {/* Voice state label */}
+      {voiceState === "listening" && (
+        <div className="voice-listening-label">
+          <span className="voice-pulse" />
+          {s.voice_listening}
+        </div>
+      )}
+      {voiceState === "error" && (
+        <div className="validation-banner"><IconAlert /> {s.voice_not_supported}</div>
+      )}
 
       {/* ── Weekly insight ── */}
       <div className="insight-section">
@@ -222,7 +404,12 @@ export default function AppSkin({ records, onSubmit, loading, error, lang }: Pro
         {weekInsight && (
           <div className="insight-card">
             <IconLightbulb />
-            {weekInsight}
+            <span style={{ flex: 1 }}>{weekInsight}</span>
+            {hasTTS() && (
+              <button className="btn-voice-read" onClick={() => speak(weekInsight, lang)} title={s.voice_read} aria-label={s.voice_read}>
+                <IconVolume />
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -297,7 +484,12 @@ export default function AppSkin({ records, onSubmit, loading, error, lang }: Pro
                 </div>
                 <div className="entry-insight">
                   <IconLightbulb />
-                  {r.insight}
+                  <span style={{ flex: 1 }}>{r.insight}</span>
+                  {hasTTS() && (
+                    <button className="btn-voice-read" onClick={() => speak(r.insight, lang)} title={s.voice_read} aria-label={s.voice_read}>
+                      <IconVolume />
+                    </button>
+                  )}
                 </div>
                 <div className="entry-time">{new Date(r.ts).toLocaleString("en-RW")}</div>
               </div>

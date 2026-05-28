@@ -10,6 +10,7 @@
 
 const { parseEntry, weeklyInsight } = require("./claude");
 const { getSession, createSession, deleteSession } = require("./sessions");
+const { saveRecord, getTodayRecords } = require("./db");
 
 const LANG_PROMPT = `CON Hitamo ururimi / Pick your language:\n1. Kinyarwanda\n2. English`;
 
@@ -51,6 +52,18 @@ const MSG = {
 
 function fmt(n) {
   return n.toLocaleString("en-RW") + " RWF";
+}
+
+/**
+ * A valid bookkeeping entry must describe an item (at least one letter)
+ * AND include an amount (at least one digit), and be long enough to be meaningful.
+ */
+function isValidEntry(entry) {
+  return (
+    entry.trim().length >= 5 &&
+    /[a-zA-ZÀ-ɏĀ-ɏ]/.test(entry) &&
+    /\d/.test(entry)
+  );
 }
 
 function totalProfit(records) {
@@ -96,21 +109,28 @@ async function handleUSSD({ sessionId, phoneNumber, text }) {
         return m.enter_entry;
 
       case "2": {
-        if (!session.records.length) return m.no_records;
-        const profit = totalProfit(session.records);
+        // Load today's records from DB so profit survives session restarts
+        let dayRecords = [];
+        try { dayRecords = await getTodayRecords(phoneNumber); } catch { /* fall back */ }
+        if (!dayRecords.length && !session.records.length) return m.no_records;
+        const allRecords = dayRecords.length ? dayRecords : session.records;
+        const profit = totalProfit(allRecords);
         const sign = profit >= 0 ? "+" : "";
         return (
           `END ${m.profit_title}\n` +
           `${m.profit_label}: ${sign}${fmt(profit)}\n` +
-          `${m.entries_label}: ${session.records.length}\n\n` +
+          `${m.entries_label}: ${allRecords.length}\n\n` +
           m.thanks
         );
       }
 
       case "3": {
-        if (!session.records.length) return m.no_records;
+        let dayRecords = [];
+        try { dayRecords = await getTodayRecords(phoneNumber); } catch { /* fall back */ }
+        const allRecords = dayRecords.length ? dayRecords : session.records;
+        if (!allRecords.length) return m.no_records;
         try {
-          const summary = buildSummary(session.records);
+          const summary = buildSummary(allRecords);
           const insight = await weeklyInsight(summary);
           return `END ${m.insight_title}:\n${insight}`;
         } catch {
@@ -127,18 +147,68 @@ async function handleUSSD({ sessionId, phoneNumber, text }) {
     }
   }
 
-  // ── Entry input: lang * 1 * <entry text> ─────────────────────────────────
+  // ── Entry input: lang * 1 * <entry text> [ * <clarification> ] ───────────
   if (parts.length >= 3 && parts[1] === "1") {
+
+    // ── Turn 2: user is answering a clarifying question ───────────────────
+    if (session.step === "AWAITING_CLARIFICATION" && session.pendingEntry) {
+      const answer = parts[parts.length - 1].trim();
+      if (!answer) {
+        return lang === "rw"
+          ? `CON ${session.pendingQuestion}\n\nSubiza:`
+          : `CON ${session.pendingQuestion}\n\nYour answer:`;
+      }
+
+      // Combine original entry with the clarification answer and re-parse
+      const combined = `${session.pendingEntry}. ${answer}`;
+      session.step = "MAIN_MENU";
+      session.pendingEntry = "";
+      session.pendingQuestion = "";
+
+      try {
+        const result = await parseEntry(combined);
+        session.records.push({ ...result, entry: combined, ts: Date.now() });
+        saveRecord({ phone: phoneNumber, channel: "ussd", entry: combined, ...result }).catch(
+          (e) => console.error("DB save error (USSD clarification):", e)
+        );
+        const sign = result.profit >= 0 ? "+" : "";
+        const profitLine = result.profit !== 0 ? `${m.profit_label}: ${sign}${fmt(result.profit)}\n` : "";
+        return `END ${m.saved}\n${profitLine}${result.insight}\n\n${m.redial}`;
+      } catch {
+        return `END ${m.error_entry}`;
+      }
+    }
+
+    // ── Turn 1: first submission ──────────────────────────────────────────
     const entry = parts.slice(2).join("*").trim();
     if (!entry) return m.enter_entry;
 
+    if (!isValidEntry(entry)) {
+      return lang === "rw"
+        ? `CON ❌ Ntibyumvikana. Andika izina ry'igicuruzwa N'igiciro.\nMfano: naguze ibirayi 5000, nagurishije 7000\n\nOngera uandike:`
+        : `CON ❌ Entry not recognized. Include item name AND amount.\nExample: bought potatoes 5000, sold for 7000\n\nTry again:`;
+    }
+
     try {
       const result = await parseEntry(entry);
-      session.records.push({ ...result, entry, ts: Date.now() });
 
+      // If Claude is asking a follow-up question, keep the session open
+      if (result.insight.trim().endsWith("?")) {
+        session.step = "AWAITING_CLARIFICATION";
+        session.pendingEntry = entry;
+        session.pendingQuestion = result.insight.trim();
+        return lang === "rw"
+          ? `CON ${result.insight}\n\nSubiza:`
+          : `CON ${result.insight}\n\nYour answer:`;
+      }
+
+      // Claude gave a complete answer — save and end
+      session.records.push({ ...result, entry, ts: Date.now() });
+      saveRecord({ phone: phoneNumber, channel: "ussd", entry, ...result }).catch(
+        (e) => console.error("DB save error (USSD):", e)
+      );
       const sign = result.profit >= 0 ? "+" : "";
       const profitLine = result.profit !== 0 ? `${m.profit_label}: ${sign}${fmt(result.profit)}\n` : "";
-
       return `END ${m.saved}\n${profitLine}${result.insight}\n\n${m.redial}`;
     } catch {
       return `END ${m.error_entry}`;

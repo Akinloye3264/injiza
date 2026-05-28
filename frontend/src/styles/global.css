@@ -390,6 +390,38 @@ input { font-family: var(--font-body); outline: none; }
 }
 .input-wrap input::placeholder { color: rgba(255,255,255,0.25); }
 
+/* Validation states on the input wrapper */
+.input-invalid input {
+  border-color: rgba(255,107,107,0.5) !important;
+  box-shadow: 0 0 0 3px rgba(255,107,107,0.08) !important;
+}
+.input-valid input {
+  border-color: rgba(134,210,158,0.45) !important;
+  box-shadow: 0 0 0 3px rgba(134,210,158,0.07) !important;
+}
+
+/* Inline hint shown beneath the input when entry is invalid */
+.entry-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--red);
+  margin: -12px 0 14px 2px;
+  opacity: 0.85;
+  animation: fadeSlideIn 0.15s ease;
+}
+
+/* Same hint inside USSD simulator */
+.ussd-entry-hint {
+  font-size: 0.68rem;
+  color: var(--red);
+  padding: 4px 10px 6px;
+  opacity: 0.85;
+  animation: fadeSlideIn 0.15s ease;
+  line-height: 1.4;
+}
+
 .btn-primary {
   background: #fff;
   border: none;
@@ -952,7 +984,9 @@ input { font-family: var(--font-body); outline: none; }
 .sim-menu-text   { color: rgba(255,255,255,0.55); }
 .screen-ended-badge { margin-top: 8px; font-size: 0.58rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.2); border-top: 1px solid rgba(255,255,255,0.06); padding-top: 7px; text-align: center; }
 
-.screen-input-row { border-top: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; display: flex; align-items: center; gap: 6px; }
+.screen-input-row { border-top: 1px solid rgba(255,255,255,0.06); padding: 8px 12px; display: flex; align-items: center; gap: 6px; transition: border-color 0.15s; }
+.screen-input-row.input-invalid,
+.ussd-inline-input-row.input-invalid { border-top-color: rgba(255,107,107,0.5); }
 .screen-prompt    { color: rgba(255,255,255,0.6); font-size: 0.8rem; font-weight: 700; line-height: 1; flex-shrink: 0; }
 .screen-input     { flex: 1; background: transparent; border: none; color: #fff; font-family: "SF Mono","Fira Code",monospace; font-size: 0.71rem; caret-color: #fff; padding: 0; min-width: 0; }
 .screen-input::placeholder { color: rgba(255,255,255,0.22); font-size: 0.62rem; }
@@ -973,3 +1007,123 @@ input { font-family: var(--font-body); outline: none; }
 .sim-key-action:disabled { opacity: 0.35; }
 .sim-key-hangup { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.25); color: var(--red); }
 .sim-key-hangup:hover:not(:disabled) { background: rgba(255,107,107,0.18); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VALIDATION BANNER
+══════════════════════════════════════════════════════════════════════════ */
+.validation-banner {
+  background: rgba(245,190,66,0.08);
+  border: 1px solid rgba(245,190,66,0.2);
+  color: var(--amber);
+  border-radius: var(--radius-sm);
+  padding: 8px 13px;
+  font-size: 0.76rem;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  animation: fadeSlideIn 0.18s ease;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MIC BUTTON — inside .input-wrap
+══════════════════════════════════════════════════════════════════════════ */
+.input-wrap {
+  position: relative;
+}
+
+.btn-mic {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.45);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  z-index: 2;
+}
+.btn-mic:hover:not(:disabled) {
+  background: rgba(255,255,255,0.12);
+  color: rgba(255,255,255,0.8);
+}
+.btn-mic:disabled { opacity: 0.25; cursor: not-allowed; }
+
+.btn-mic.listening {
+  background: rgba(245,190,66,0.15);
+  border-color: rgba(245,190,66,0.4);
+  color: var(--amber);
+  animation: micPulse 1.2s ease-in-out infinite;
+}
+.btn-mic.mic-error {
+  background: rgba(255,107,107,0.1);
+  border-color: rgba(255,107,107,0.3);
+  color: var(--red);
+}
+
+@keyframes micPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245,190,66,0.35); }
+  50%       { box-shadow: 0 0 0 6px rgba(245,190,66,0); }
+}
+
+/* Shift input right padding so text doesn't go under mic button */
+.input-wrap input { padding-right: 48px; }
+
+/* ── Voice listening label ── */
+.voice-listening-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  color: var(--amber);
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+.voice-pulse {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--amber);
+  animation: pulse 1s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.7); }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   VOICE READ BUTTON — inside insight card / entry card
+══════════════════════════════════════════════════════════════════════════ */
+.btn-voice-read {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.3);
+  cursor: pointer;
+  transition: background 0.14s, color 0.14s;
+  margin-left: 6px;
+}
+.btn-voice-read:hover {
+  background: rgba(255,255,255,0.07);
+  color: rgba(255,255,255,0.7);
+}
+

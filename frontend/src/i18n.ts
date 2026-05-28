@@ -59,6 +59,12 @@ export const t = {
     tab_bookkeeping: "Bookkeeping App",
     tab_ussd: "USSD Simulator",
     hero_subtitle: "INJIZA — Effortless bookkeeping for Rwanda's micro-businesses. Track income, costs, and loan readiness using natural language — powered by Claude AI.",
+    voice_start: "Speak entry",
+    voice_listening: "Listening…",
+    voice_stop: "Stop",
+    voice_not_supported: "Voice not supported in this browser",
+    voice_read: "Read aloud",
+    voice_validation_err: "Only letters, numbers and basic punctuation are allowed",
   },
   rw: {
     tagline: "kwinjiza amafaranga",
@@ -118,6 +124,12 @@ export const t = {
     tab_bookkeeping: "Kwandika Amafaranga",
     tab_ussd: "Gerageza USSD",
     hero_subtitle: "INJIZA — Kwandika amafaranga y'ubucuruzi bwawe buri munsi. Kureba inyungu, ibiciro, n'inguzanyo — ukoresheje ururimi rw'umuntu.",
+    voice_start: "Vuga injira",
+    voice_listening: "Gutega…",
+    voice_stop: "Hagarika",
+    voice_not_supported: "Ijwi ntishoboka muri browser yawe",
+    voice_read: "Soma mu ijwi",
+    voice_validation_err: "Inyuguti, imibare n'akama gusa birekurwa",
   },
 } as const;
 

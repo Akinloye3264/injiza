@@ -5,6 +5,7 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerJsdoc = require("swagger-jsdoc");
 const { handleUSSD } = require("./ussd");
 const { parseEntry, weeklyInsight } = require("./claude");
+const { initDB, saveRecord, getRecords } = require("./db");
 
 const app = express();
 app.use(cors());
@@ -226,10 +227,14 @@ app.post("/ussd", async (req, res) => {
  *         description: Claude API error
  */
 app.post("/api/parse", async (req, res) => {
-  const { entry } = req.body;
+  const { entry, phone } = req.body;
   if (!entry) return res.status(400).json({ error: "entry is required" });
   try {
     const result = await parseEntry(entry);
+    // Persist to DB (fire-and-forget — don't fail the request if DB is slow)
+    saveRecord({ phone: phone || "demo", channel: "web", entry, ...result }).catch(
+      (e) => console.error("DB save error:", e)
+    );
     res.json(result);
   } catch (err) {
     console.error("Parse error:", err);
@@ -348,9 +353,49 @@ app.get("/health", (_req, res) => res.json({ status: "ok", service: "injiza-back
  *           example: "Great margin — consider buying a larger batch tomorrow!"
  */
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`\n  Injiza backend  →  http://localhost:${PORT}`);
-  console.log(`  Swagger docs    →  http://localhost:${PORT}/api-docs`);
-  console.log(`  USSD callback   →  http://localhost:${PORT}/ussd\n`);
+// ─── Records API ──────────────────────────────────────────────────────────────
+/**
+ * @openapi
+ * /api/records:
+ *   get:
+ *     tags: [AI]
+ *     summary: Fetch persisted records for a phone number
+ *     parameters:
+ *       - in: query
+ *         name: phone
+ *         required: true
+ *         schema:
+ *           type: string
+ *           example: "+250788000000"
+ *     responses:
+ *       200:
+ *         description: Array of records (newest first)
+ *       400:
+ *         description: Missing phone parameter
+ */
+app.get("/api/records", async (req, res) => {
+  const { phone } = req.query;
+  if (!phone) return res.status(400).json({ error: "phone is required" });
+  try {
+    const rows = await getRecords(phone);
+    res.json(rows);
+  } catch (err) {
+    console.error("Records fetch error:", err);
+    res.status(500).json({ error: "Failed to load records." });
+  }
 });
+
+const PORT = process.env.PORT || 3001;
+
+initDB()
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`\n  Injiza backend  →  http://localhost:${PORT}`);
+      console.log(`  Swagger docs    →  http://localhost:${PORT}/api-docs`);
+      console.log(`  USSD callback   →  http://localhost:${PORT}/ussd\n`);
+    });
+  })
+  .catch((err) => {
+    console.error("Failed to initialise database:", err);
+    process.exit(1);
+  });

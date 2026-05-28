@@ -87,6 +87,21 @@ export default function UssdSimulator({ lang, inlineMode = false }: Props) {
   }
   function pressBackspace() { setInputBuf((p) => p.slice(0, -1)); }
 
+  // If the current screen shows a numbered menu (lines like "1. …"), only
+  // digits are needed. If it's a free-text prompt (enter your sales), allow
+  // letters + digits + safe punctuation so users can type their entry.
+  const isMenuScreen = screenText.split("\n").some((l) => /^\d+\.\s/.test(l));
+
+  const ENTRY_FORBIDDEN = /[<>{}[\]|\\^~`@#$%&*=+;:!?()/]/g;
+
+  function handleUssdInputChange(val: string) {
+    if (isMenuScreen) {
+      setInputBuf(val.replace(/\D/g, ""));   // menu: digits only
+    } else {
+      setInputBuf(val.replace(ENTRY_FORBIDDEN, ""));  // text entry: safe chars only
+    }
+  }
+
   async function pressAction() {
     if (phase === "loading") return;
     if (phase === "idle") {
@@ -130,9 +145,33 @@ export default function UssdSimulator({ lang, inlineMode = false }: Props) {
   }
 
   const isEnded = phase === "ended" || phase === "error";
-  const actionLabel   = isEnded ? s.sim_hangup : phase === "session" ? s.sim_send : s.sim_call;
-  const actionDisabled = phase === "loading" || (phase === "session" && !inputBuf.trim());
+  const actionLabel = isEnded ? s.sim_hangup : phase === "session" ? s.sim_send : s.sim_call;
   const lines = screenText.split("\n");
+
+  // If Claude asked a clarifying question the screen will end with "?"
+  // In that case just require a non-empty answer (any text is fine).
+  // For the initial entry screen, require both item name (letters) and amount (digits).
+  const isClarificationScreen = !isMenuScreen && /\?\s*$/.test(screenText.trim());
+
+  // placeholder dynamically changes so user knows what to type
+  const inputPlaceholder = isMenuScreen
+    ? "enter number…"
+    : isClarificationScreen
+      ? "type your answer…"
+      : "type your entry…";
+
+  function isEntryValid(val: string): boolean {
+    if (isMenuScreen) return val.trim().length > 0;
+    if (isClarificationScreen) return val.trim().length >= 2;   // any answer is fine
+    const v = val.trim();
+    return v.length >= 5 && /[a-zA-ZÀ-ɏ]/.test(v) && /\d/.test(v);
+  }
+
+  const entryValid = isEntryValid(inputBuf);
+  // Show hint only on initial entry screens, not clarification screens
+  const showEntryHint = phase === "session" && !isMenuScreen && !isClarificationScreen && inputBuf.trim().length > 0 && !entryValid;
+
+  const actionDisabled = phase === "loading" || (phase === "session" && !entryValid);
 
   // ── Shared screen body content ──────────────────────────────────────────
   const screenContent = (
@@ -225,18 +264,25 @@ export default function UssdSimulator({ lang, inlineMode = false }: Props) {
 
         {/* Input row — only while session */}
         {phase === "session" && (
-          <div className="ussd-inline-input-row">
-            <span className="screen-prompt">›</span>
-            <input
-              ref={inputRef}
-              className="screen-input"
-              value={inputBuf}
-              onChange={(e) => setInputBuf(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && pressAction()}
-              placeholder="type reply…"
-              autoComplete="off" autoCorrect="off" spellCheck={false}
-            />
-          </div>
+          <>
+            <div className={`ussd-inline-input-row ${showEntryHint ? "input-invalid" : ""}`}>
+              <span className="screen-prompt">›</span>
+              <input
+                ref={inputRef}
+                className="screen-input"
+                value={inputBuf}
+                onChange={(e) => handleUssdInputChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && pressAction()}
+                placeholder={inputPlaceholder}
+                autoComplete="off" autoCorrect="off" spellCheck={false}
+              />
+            </div>
+            {showEntryHint && (
+              <div className="ussd-entry-hint">
+                Include item name + amount. e.g. ibirayi 5000, nagurishije 7000
+              </div>
+            )}
+          </>
         )}
 
         {/* Keypad */}
@@ -276,18 +322,25 @@ export default function UssdSimulator({ lang, inlineMode = false }: Props) {
             </div>
 
             {phase === "session" && (
-              <div className="screen-input-row">
-                <span className="screen-prompt">›</span>
-                <input
-                  ref={inputRef}
-                  className="screen-input"
-                  value={inputBuf}
-                  onChange={(e) => setInputBuf(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && pressAction()}
-                  placeholder="type reply…"
-                  autoComplete="off" autoCorrect="off" spellCheck={false}
-                />
-              </div>
+              <>
+                <div className={`screen-input-row ${showEntryHint ? "input-invalid" : ""}`}>
+                  <span className="screen-prompt">›</span>
+                  <input
+                    ref={inputRef}
+                    className="screen-input"
+                    value={inputBuf}
+                    onChange={(e) => handleUssdInputChange(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && pressAction()}
+                    placeholder={inputPlaceholder}
+                    autoComplete="off" autoCorrect="off" spellCheck={false}
+                  />
+                </div>
+                {showEntryHint && (
+                  <div className="ussd-entry-hint">
+                    Include item name + amount. e.g. ibirayi 5000, nagurishije 7000
+                  </div>
+                )}
+              </>
             )}
           </div>
 
