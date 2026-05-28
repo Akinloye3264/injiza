@@ -10,20 +10,20 @@
 
 const { parseEntry, weeklyInsight } = require("./claude");
 const { getSession, createSession, deleteSession } = require("./sessions");
-const { saveRecord, getTodayRecords } = require("./db");
+const { saveRecord, getRecords } = require("./db");
 
 const LANG_PROMPT = `CON Hitamo ururimi / Pick your language:\n1. Kinyarwanda\n2. English`;
 
 const MAIN_MENU = {
-  rw: `CON Murakaza neza kuri INJIZA 📒\n1. Injiza ibyagurishijwe/ibyaguze\n2. Reba inyungu y'uyu munsi\n3. Inama y'icyumweru\n4. Sohoka`,
-  en: `CON Welcome to INJIZA 📒\n1. Record a sale or purchase\n2. View today's profit\n3. Weekly coaching insight\n4. Exit`,
+  rw: `CON Murakaza neza kuri INJIZA 📒\n1. Injiza ibyagurishijwe/ibyaguze\n2. Reba inyungu yose\n3. Inama y'icyumweru\n4. Sohoka`,
+  en: `CON Welcome to INJIZA 📒\n1. Record a sale or purchase\n2. View total profit\n3. Weekly coaching insight\n4. Exit`,
 };
 
 const MSG = {
   rw: {
     enter_entry: `CON Andika ibyo waguze n'ibyo wagurishije:\n(mfano: naguze ibirayi 5000, nagurishije 7000)`,
     no_records: `END Nta makuru afashwe. Injiza ibyagurishijwe mbere.`,
-    profit_title: "📊 Inyungu y'uyu munsi",
+    profit_title: "📊 Inyungu yose",
     profit_label: "Inyungu",
     entries_label: "Inzira",
     insight_title: "💡 Inama y'icyumweru",
@@ -37,7 +37,7 @@ const MSG = {
   en: {
     enter_entry: `CON Enter what you bought and sold:\n(e.g. bought potatoes 5000, sold for 7000)`,
     no_records: `END No records yet. Record a transaction first.`,
-    profit_title: "📊 Today's profit",
+    profit_title: "📊 Total profit",
     profit_label: "Profit",
     entries_label: "Entries",
     insight_title: "💡 Weekly insight",
@@ -109,11 +109,14 @@ async function handleUSSD({ sessionId, phoneNumber, text }) {
         return m.enter_entry;
 
       case "2": {
-        // Load today's records from DB so profit survives session restarts
-        let dayRecords = [];
-        try { dayRecords = await getTodayRecords(phoneNumber); } catch { /* fall back */ }
-        if (!dayRecords.length && !session.records.length) return m.no_records;
-        const allRecords = dayRecords.length ? dayRecords : session.records;
+        // Load all records from DB — persists across sessions
+        let dbRecords = [];
+        try { dbRecords = await getRecords(phoneNumber); } catch (e) { console.error("DB error (profit):", e.message); }
+        // Merge DB records with any unsaved in-session records (avoid duplicates by ts)
+        const dbTs = new Set(dbRecords.map((r) => r.created_at?.getTime?.() ?? 0));
+        const sessionOnly = session.records.filter((r) => !dbTs.has(r.ts));
+        const allRecords = [...dbRecords, ...sessionOnly];
+        if (!allRecords.length) return m.no_records;
         const profit = totalProfit(allRecords);
         const sign = profit >= 0 ? "+" : "";
         return (
@@ -125,9 +128,10 @@ async function handleUSSD({ sessionId, phoneNumber, text }) {
       }
 
       case "3": {
-        let dayRecords = [];
-        try { dayRecords = await getTodayRecords(phoneNumber); } catch { /* fall back */ }
-        const allRecords = dayRecords.length ? dayRecords : session.records;
+        let dbRecords = [];
+        try { dbRecords = await getRecords(phoneNumber); } catch (e) { console.error("DB error (insight):", e.message); }
+        const sessionOnly = session.records;
+        const allRecords = dbRecords.length ? dbRecords : sessionOnly;
         if (!allRecords.length) return m.no_records;
         try {
           const summary = buildSummary(allRecords);
